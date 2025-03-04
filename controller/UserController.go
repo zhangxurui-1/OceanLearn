@@ -6,22 +6,29 @@ import (
 	"log"
 	"net/http"
 	"oceanlearn/common"
+	"oceanlearn/dto"
 	"oceanlearn/model"
+	"oceanlearn/response"
 	"oceanlearn/util"
 )
 
 func Register(ctx *gin.Context) {
-	name := ctx.PostForm("name")
-	telephone := ctx.PostForm("telephone")
-	password := ctx.PostForm("password")
+	requestMap := model.User{}
+	if err := ctx.Bind(&requestMap); err != nil {
+		return
+	}
+
+	name := requestMap.Name
+	telephone := requestMap.Telephone
+	password := requestMap.Password
 
 	if len(telephone) != 11 {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "message": "手机号必须为11位", "length": len(telephone)})
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "手机号必须为11位")
 		return
 	}
 
 	if len(password) < 6 {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "message": "密码不得小于6位"})
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "密码不得小于6位")
 		return
 	}
 
@@ -30,13 +37,13 @@ func Register(ctx *gin.Context) {
 	}
 
 	if isTelephoneExist(telephone) {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "message": "用户已注册"})
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "用户已注册")
 		return
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "加密异常"})
+		response.Response(ctx, http.StatusInternalServerError, 500, nil, "加密异常")
 	}
 	newUser := model.User{
 		Name:      name,
@@ -46,43 +53,53 @@ func Register(ctx *gin.Context) {
 	DB := common.GetDB()
 	DB.Create(&newUser)
 
-	ctx.JSON(200, gin.H{
-		"message": "注册成功",
-	})
+	// 发放token
+	token, err := common.ReleaseToken(newUser)
+	if err != nil {
+		response.Response(ctx, http.StatusInternalServerError, 500, nil, "系统异常")
+		log.Printf("token generate error: %v\n", err)
+		return
+	}
+
+	response.Success(ctx, gin.H{"token": token}, "注册成功")
 }
 
 func Login(ctx *gin.Context) {
-	telephone := ctx.PostForm("telephone")
-	password := ctx.PostForm("password")
+	requestMap := model.User{}
+	if err := ctx.Bind(&requestMap); err != nil {
+		return
+	}
+	telephone := requestMap.Telephone
+	password := requestMap.Password
 
 	var user model.User
 	DB := common.GetDB()
 	DB.Where("telephone = ?", telephone).First(&user)
 
 	if user.ID == 0 {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"code": 422, "message": "用户不存在"})
+		response.Response(ctx, http.StatusUnprocessableEntity, 422, nil, "用户不存在")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"code": 400, "message": "密码错误"})
+		response.Response(ctx, http.StatusBadRequest, 400, nil, "密码错误")
 		return
 	}
 
+	// 服务端发放token
 	token, err := common.ReleaseToken(user)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"code": 500, "message": "系统异常"})
+		response.Response(ctx, http.StatusInternalServerError, 500, nil, "系统异常")
 		log.Printf("token generate error: %v\n", err)
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"code": 200,
-		"data": gin.H{
-			"token": token,
-		},
-		"message": "登录成功",
-	})
+	response.Success(ctx, gin.H{"token": token}, "登录成功")
+}
+
+func Info(ctx *gin.Context) {
+	user, _ := ctx.Get("user")
+	response.Success(ctx, gin.H{"user": dto.ToUserDto(user.(model.User))}, "")
 }
 
 func isTelephoneExist(telephone string) bool {

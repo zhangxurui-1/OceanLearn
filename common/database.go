@@ -2,9 +2,11 @@ package common
 
 import (
 	"fmt"
+	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"log"
+	"net/url"
 	"oceanlearn/model"
 )
 
@@ -12,14 +14,15 @@ var DB *gorm.DB
 
 func InitDB() {
 
-	host := "localhost"
-	port := "3306"
-	database := "ginessential"
-	username := "root"
-	password := "123456"
-	charset := "utf8"
+	host := viper.GetString("datasource.host")
+	port := viper.GetString("datasource.port")
+	database := viper.GetString("datasource.database")
+	username := viper.GetString("datasource.username")
+	password := viper.GetString("datasource.password")
+	charset := viper.GetString("datasource.charset")
+	location := viper.GetString("datasource.location")
 	// 要加parseTime=true！！！
-	args := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=true", username, password, host, port, database, charset)
+	args := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=true&loc=%s", username, password, host, port, database, charset, url.QueryEscape(location))
 
 	var err error
 	DB, err = gorm.Open(mysql.Open(args), &gorm.Config{})
