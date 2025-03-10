@@ -23,12 +23,14 @@ func CollectRouter(r *gin.Engine) *gin.Engine {
 
 	// 文章
 	postRoutes := r.Group("/posts")
+	postRoutes.Use(middleware.AuthMiddleware())
 	postController := controller.NewPostController()
 
-	postRoutes.POST("", PostController.Create)
-	postRoutes.PUT("/:id", PostController.Update)
-	postRoutes.GET("/:id", PostController.Show)
-	postRoutes.DELETE("/:id", PostController.Delete)
+	postRoutes.POST("", postController.Create)
+	postRoutes.PUT("/:id", postController.Update)
+	postRoutes.GET("/:id", postController.Show)
+	postRoutes.DELETE("/:id", postController.Delete)
+	postRoutes.POST("page/list", postController.PageList)
 
 	return r
 }

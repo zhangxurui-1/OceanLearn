@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"oceanlearn/model"
 	"oceanlearn/response"
 	"oceanlearn/util"
+	"time"
 )
 
 func Register(ctx *gin.Context) {
@@ -60,6 +62,10 @@ func Register(ctx *gin.Context) {
 		log.Printf("token generate error: %v\n", err)
 		return
 	}
+	// 存入 redis
+	redisClient := common.GetRedisClient()
+	redisClient.Set(context.Background(), telephone+":token", token, time.Hour)
+	redisClient.Set(context.Background(), telephone+":name", newUser.Name, time.Hour)
 
 	response.Success(ctx, gin.H{"token": token}, "注册成功")
 }
@@ -93,13 +99,35 @@ func Login(ctx *gin.Context) {
 		log.Printf("token generate error: %v\n", err)
 		return
 	}
+	// 存入 redis
+	redisClient := common.GetRedisClient()
+	redisClient.Set(context.Background(), telephone+":token", token, time.Hour)
+	redisClient.Set(context.Background(), telephone+":name", user.Name, time.Hour)
 
 	response.Success(ctx, gin.H{"token": token}, "登录成功")
 }
 
 func Info(ctx *gin.Context) {
-	user, _ := ctx.Get("user")
-	response.Success(ctx, gin.H{"user": dto.ToUserDto(user.(model.User))}, "")
+	requestMap := model.User{}
+	if err := ctx.Bind(&requestMap); err != nil {
+		return
+	}
+
+	// 从 redis 获取用户名；认证中间件已经存过相应的内容
+	redisClient := common.GetRedisClient()
+	telephone, _ := ctx.Get("telephone")
+	username, err := redisClient.Get(context.Background(), telephone.(string)+":name").Result()
+	if err != nil {
+		response.Response(ctx, http.StatusInternalServerError, 500, nil, "服务异常")
+		return
+	}
+
+	response.Success(ctx, gin.H{
+		"user": dto.UserDto{
+			Name:      username,
+			Telephone: telephone.(string),
+		},
+	}, "")
 }
 
 func isTelephoneExist(telephone string) bool {

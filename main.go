@@ -11,6 +11,7 @@ import (
 func main() {
 	InitConfig()
 	common.InitDB()
+	common.InitRedis()
 	r := gin.Default()
 	r = CollectRouter(r)
 
